@@ -21,7 +21,7 @@
 #
 
 require "trollop"
-require File.expand_path('../../../lib/recordandplayback', __FILE__)
+require '../../core/lib/recordandplayback'
 require 'builder'
 
 opts = Trollop::options do
@@ -34,9 +34,6 @@ url = opts[:url]
 logger = Logger.new("/var/log/bigbluebutton/post_publish.log", 'weekly' )
 logger.level = Logger::INFO
 BigBlueButton.logger = logger
-
-published_files = "/var/bigbluebutton/published/presentation/#{meeting_id}"
-meeting_metadata = BigBlueButton::Events.get_meeting_metadata("/var/bigbluebutton/recording/raw/#{meeting_id}/events.xml")
 
 #
 # This runs the download script
