@@ -3,6 +3,6 @@
 	"ffmpegServer": "ws://localhost",
 	"ffmpegServerPort": 4000,
 	"auth": "mZFZN4yc",
-	"copyToPath": "/var/www/bigbluebutton-default/record",
+	"copyToPath": "/var/bigbluebutton/recording/videos",
 	"playbackFile": "playback\\.html"
 }
