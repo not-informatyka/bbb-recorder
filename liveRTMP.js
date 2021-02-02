@@ -2,12 +2,12 @@ const puppeteer = require('puppeteer');
 const Xvfb      = require('xvfb');
 var exec = require('child_process').exec;
 const fs = require('fs');
-var config = JSON.parse(fs.readFileSync("config.json", 'utf8'));
+const { ffmpegServer, ffmpegServerPort, auth } = require('./env');
 const os = require('os');
 const homedir = os.homedir();
 const platform = os.platform();
 
-const ffmpegServer = config.ffmpegServer + ":" + config.ffmpegServerPort + "/auth/" + config.auth;
+const ffmpegHost = ffmpegServer + ":" + ffmpegServerPort + "/auth/" + auth;
 
 var xvfb        = new Xvfb({
     silent: true,
@@ -24,7 +24,7 @@ var options     = {
     '--load-extension=' + __dirname,
     '--disable-extensions-except=' + __dirname,
     '--disable-infobars',
-    '--no-sandbox',    
+    '--no-sandbox',
     '--shm-size=1gb',
     '--disable-dev-shm-usage',
     '--start-fullscreen',
@@ -39,21 +39,23 @@ if(platform == "linux"){
 }
 
 async function main() {
+    let browser, page;
+
     try{
         if(platform == "linux"){
             xvfb.startSync()
         }
         var url = process.argv[2],
-            duration = process.argv[3], 
+            duration = process.argv[3],
             exportname = 'liveMeeting.webm'
 
         if(!url){ url = 'https://www.mynaparrot.com/' }
         //if(!duration){ duration = 10 }
-        
-        const browser = await puppeteer.launch(options)
+
+        browser = await puppeteer.launch(options)
         const pages = await browser.pages()
-        
-        const page = pages[0]
+
+        page = pages[0]
 
         page.on('console', msg => {
             var m = msg.text();
@@ -67,7 +69,7 @@ async function main() {
         await page.evaluate((serverAddress) => {
             console.log("FFMPEG_SERVER");
             window.postMessage({type: 'FFMPEG_SERVER', ffmpegServer: serverAddress}, '*')
-        }, ffmpegServer)
+        }, ffmpegHost)
 
         await page.waitForSelector('[aria-label="Listen only"]');
         await page.click('[aria-label="Listen only"]', {waitUntil: 'domcontentloaded'});
@@ -82,7 +84,7 @@ async function main() {
         await page.$eval('[class^=actionsbar] > [class^=center]', element => element.style.display = "none");
         await page.mouse.move(0, 700);
         await page.addStyleTag({content: '@keyframes refresh {0%{ opacity: 1 } 100% { opacity: 0.99 }} body { animation: refresh .01s infinite }'});
-        
+
         await page.evaluate((x) => {
             console.log("REC_START");
             window.postMessage({type: 'REC_START'}, '*')
@@ -91,9 +93,10 @@ async function main() {
         if(duration > 0){
             await page.waitFor((duration * 1000))
         }else{
-            await page.waitForSelector('[class^=modal] > [class^=content] > button[description="Logs you out of the meeting"]', {
-                timeout: 0
-            });
+            await page.waitForSelector('button[description="Logs you out of the meeting"]', {
+                timeout: 0,
+                visible: true
+            }).then(() => console.log('Found closing selector so closing!!'));
         }
 
         await page.evaluate(filename=>{
@@ -103,18 +106,19 @@ async function main() {
 
         // Wait for download of webm to complete
         await page.waitForSelector('html.downloadComplete', {timeout: 0})
-        await page.close()
-        await browser.close()
+
+        fs.unlinkSync(homedir + "/Downloads/liveMeeting.webm");
+
+    }catch(err) {
+        console.log(err)
+    } finally {
+        page.close && await page.close()
+        browser.close && await browser.close()
 
         if(platform == "linux"){
             xvfb.stopSync()
         }
-        
-        fs.unlinkSync(homedir + "/Downloads/liveMeeting.webm");
-        
-    }catch(err) {
-        console.log(err)
     }
 }
 
-main()
+main();

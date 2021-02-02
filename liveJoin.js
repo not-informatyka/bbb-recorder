@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const homedir = os.homedir();
 const platform = os.platform();
-const config = JSON.parse(fs.readFileSync("config.json", 'utf8'));
+const { copyToPath } = require('./env');
 const spawn = require('child_process').spawn;
 
 var xvfb        = new Xvfb({
@@ -22,7 +22,7 @@ var options     = {
     '--load-extension=' + __dirname,
     '--disable-extensions-except=' + __dirname,
     '--disable-infobars',
-    '--no-sandbox',    
+    '--no-sandbox',
     '--shm-size=1gb',
     '--disable-dev-shm-usage',
     '--start-fullscreen',
@@ -38,12 +38,14 @@ if(platform == "linux"){
 }
 
 async function main() {
+    let browser, page;
+
     try{
         if(platform == "linux"){
             xvfb.startSync()
         }
         var url = process.argv[2],
-            exportname = process.argv[3], 
+            exportname = process.argv[3],
             duration = process.argv[4],
             convert = process.argv[5]
 
@@ -51,11 +53,11 @@ async function main() {
         if(!exportname){ exportname = 'live.webm' }
         //if(!duration){ duration = 10 }
         if(!convert){ convert = false }
-        
-        const browser = await puppeteer.launch(options)
+
+        browser = await puppeteer.launch(options)
         const pages = await browser.pages()
-        
-        const page = pages[0]
+
+        page = pages[0]
 
         page.on('console', msg => {
             var m = msg.text();
@@ -79,7 +81,7 @@ async function main() {
         await page.$eval('[class^=actionsbar] > [class^=center]', element => element.style.display = "none");
         await page.mouse.move(0, 700);
         await page.addStyleTag({content: '@keyframes refresh {0%{ opacity: 1 } 100% { opacity: 0.99 }} body { animation: refresh .01s infinite }'});
-        
+
         await page.evaluate((x) => {
             console.log("REC_START");
             window.postMessage({type: 'REC_START'}, '*')
@@ -100,30 +102,30 @@ async function main() {
 
         // Wait for download of webm to complete
         await page.waitForSelector('html.downloadComplete', {timeout: 0})
-        await page.close()
-        await browser.close()
-
-        if(platform == "linux"){
-            xvfb.stopSync()
-        }
 
         if(convert){
             convertAndCopy(exportname)
         }else{
             copyOnly(exportname)
         }
-        
+
     }catch(err) {
         console.log(err)
+    } finally {
+        page.close && await page.close()
+        browser.close && await browser.close()
+
+        if(platform == "linux"){
+            xvfb.stopSync()
+        }
     }
 }
 
 main()
 
 function convertAndCopy(filename){
- 
+
     var copyFromPath = homedir + "/Downloads";
-    var copyToPath = config.copyToPath;
     var onlyfileName = filename.split(".webm")
     var mp4File = onlyfileName[0] + ".mp4"
     var copyFrom = copyFromPath + "/" + filename + ""
@@ -170,14 +172,13 @@ function convertAndCopy(filename){
             fs.unlinkSync(copyFrom);
             console.log('successfully deleted ' + copyFrom);
         }
-       
+
     });
 }
 
 function copyOnly(filename){
 
     var copyFrom = homedir + "/Downloads/" + filename;
-    var copyToPath = config.copyToPath;
     var copyTo = copyToPath + "/" + filename;
 
     if(!fs.existsSync(copyToPath)){

@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const homedir = os.homedir();
 const platform = os.platform();
-const config = JSON.parse(fs.readFileSync("config.json", 'utf8'));
+const { copyToPath, playbackFile } = require('./env');
 const spawn = require('child_process').spawn;
 
 var xvfb        = new Xvfb({
@@ -38,18 +38,20 @@ if(platform == "linux"){
 }
 
 async function main() {
+    let browser, page;
+
     try{
         if(platform == "linux"){
             xvfb.startSync()
         }
-        
+
         var url = process.argv[2];
         if(!url){
             console.warn('URL undefined!');
             process.exit(1);
         }
         // Verify if recording URL has the correct format
-        var urlRegex = new RegExp('^https?:\\/\\/.*\\/playback\\/presentation\\/2\\.0\\/' + config.playbackFile + '\\?meetingId=[a-z0-9]{40}-[0-9]{13}');
+        var urlRegex = new RegExp('^https?:\\/\\/.*\\/playback\\/presentation\\/2\\.0\\/' + playbackFile + '\\?meetingId=[a-z0-9]{40}-[0-9]{13}');
         if(!urlRegex.test(url)){
             console.warn('Invalid recording URL!');
             process.exit(1);
@@ -79,10 +81,10 @@ async function main() {
             process.exit(1);
         }
 
-        const browser = await puppeteer.launch(options)
+        browser = await puppeteer.launch(options)
         const pages = await browser.pages()
 
-        const page = pages[0]
+        page = pages[0]
 
         page.on('console', msg => {
             var m = msg.text();
@@ -136,12 +138,6 @@ async function main() {
 
         // Wait for download of webm to complete
         await page.waitForSelector('html.downloadComplete', {timeout: 0})
-        await page.close()
-        await browser.close()
-
-        if(platform == "linux"){
-            xvfb.stopSync()
-        }
 
         if(convert){
             convertAndCopy(exportname)
@@ -151,15 +147,21 @@ async function main() {
 
     }catch(err) {
         console.log(err)
+    } finally {
+        page.close && await page.close()
+        browser.close && await browser.close()
+
+        if(platform == "linux"){
+            xvfb.stopSync()
+        }
     }
 }
 
 main()
 
 function convertAndCopy(filename){
- 
+
     var copyFromPath = homedir + "/Downloads";
-    var copyToPath = config.copyToPath;
     var onlyfileName = filename.split(".webm")
     var mp4File = onlyfileName[0] + ".mp4"
     var copyFrom = copyFromPath + "/" + filename + ""
@@ -171,7 +173,7 @@ function convertAndCopy(filename){
 
     console.log(copyTo);
     console.log(copyFrom);
-    
+
     const ls = spawn('ffmpeg',
         [   '-y',
             '-i "' + copyFrom + '"',
@@ -206,7 +208,7 @@ function convertAndCopy(filename){
             fs.unlinkSync(copyFrom);
             console.log('successfully deleted ' + copyFrom);
         }
-       
+
     });
 
 }
@@ -214,7 +216,6 @@ function convertAndCopy(filename){
 function copyOnly(filename){
 
     var copyFrom = homedir + "/Downloads/" + filename;
-    var copyToPath = config.copyToPath;
     var copyTo = copyToPath + "/" + filename;
 
     if(!fs.existsSync(copyToPath)){
